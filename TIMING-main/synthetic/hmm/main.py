@@ -95,7 +95,7 @@ def main(
         trainer.fit(classifier, datamodule=hmm)
         if not os.path.exists("./model/hmm/"):
             os.makedirs("./model/hmm/")
-        th.save(classifier.state_dict(), "../../model/hmm/classifier_{}_{}".format(fold, seed))
+        th.save(classifier.state_dict(), "./model/hmm/classifier_{}_{}".format(fold, seed))
     else:
         classifier.load_state_dict(th.load("./model/hmm/classifier_{}_{}".format(fold, seed)))
 

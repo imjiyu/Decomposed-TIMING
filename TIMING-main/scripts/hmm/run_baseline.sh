@@ -17,7 +17,7 @@ do
     CUDA_VISIBLE_DEVICES=${GPUS[i % ${NUM_GPUS}]} python synthetic/hmm/main.py \
         --fold $cv \
         --device cuda:0 \
-        --output-file hmm_${cv}_results_baseline.csv \
+        --output-file result/hmm_${cv}_results_baseline.csv \
         --deterministic \
         2>&1 &
     wait_n

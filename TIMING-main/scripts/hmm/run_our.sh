@@ -18,7 +18,7 @@ do
         --explainers our \
         --fold $cv \
         --device cuda:0 \
-        --output-file hmm_${cv}_results.csv \
+        --output-file result/hmm_${cv}_results.csv \
         2>&1 &
     wait_n
     i=$((i + 1))
