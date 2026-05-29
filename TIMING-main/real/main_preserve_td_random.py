@@ -39,7 +39,7 @@ from tint.attr.models import (
     MaskNet,
     RetainNet,
 )
-from datasets.mimic3 import Mimic3
+#from datasets.mimic3 import Mimic3
 from datasets.PAM import PAM
 from datasets.boiler import Boiler
 from datasets.epilepsy import Epilepsy
@@ -281,26 +281,28 @@ def main(
         .repeat(data_len, 1)
     )
 
-    attr = {
-        #"timing_sample50_seg50_min10_max48": 0.0,
-        #"timex++": 0.0,
-        #"winit": 0.0,
-        #"fit": 0.0,
-        #"timex": 0.0,
-        #"integrated_gradients_base_abs": 0.0,
-        #"gate_mask": 0.0,
-        #"extremal_mask": 0.0,
-        #"dyna_mask": 0.0,
-        #"gradientshap_abs": 0.0,
-        #"deeplift_abs": 0.0,
-        # ↓ 추가
-        f"timing_td_combined_kalman_seg{num_segments}_min{min_seg_len}_max{max_seg_len}": 0.0,
-        f"timing_sample50_seg{num_segments}_min{min_seg_len}_max{max_seg_len}": 0.0,
-    }
-    for key in attr.keys():
-        result = attr[key]
-        if isinstance(result, tuple): result = result[0]
-        attr[key] = th.Tensor(np.load('./results_our/{}_{}_{}_result_{}_{}.npy'.format(data, model_type, key, fold, seed))).to(device)
+    # ===================================================================
+    # RANDOM BASELINE VERSION
+    # T/R/Combined 대신, 의미 없는 random attribution 5개를 평가한다.
+    # shape는 combined npy에서 그대로 읽어와 T/R/Combined와 완전히 동일한
+    # 조건(같은 x_test, classifier, topk)에서 평가되도록 맞춘다.
+    # th.rand 는 [0,1) 양수만 내므로 abs(|T|,|R|,|T+R|) 체계와 동일하다.
+    # ===================================================================
+    combined_key = f"timing_td_combined_kalman_seg{num_segments}_min{min_seg_len}_max{max_seg_len}"
+    ref_shape = th.Tensor(
+        np.load('./results_our/{}_{}_{}_result_{}_{}.npy'.format(
+            data, model_type, combined_key, fold, seed))
+    ).shape
+    print(f"[random] reference shape from combined npy: {tuple(ref_shape)}")
+
+    N_RANDOM = 5
+    attr = {}
+    for s in range(N_RANDOM):
+        g = th.Generator(device=device).manual_seed(1000 + s)
+        attr[f"random_{s}"] = th.rand(ref_shape, generator=g, device=device)
+
+    # pred_diff 저장 폴더 보장
+    os.makedirs('./results_TRC', exist_ok=True)
 
     with open(output_file, "a") as fp, lock:
         for i, baselines in enumerate([0.0]):
@@ -314,11 +316,11 @@ def main(
                         topk=topk,
                         top=args.top,
                         testbs=testbs,
-                        largest=True,   # False=CPP, True=CPD 측정 가능!
+                        largest=True,   ### False=CPP, True=CPD 측정 가능!
                         additional_forward_args=(mask_test, timesteps, False),
                     )
                     
-                    np.save('./results_pred/{}_{}_{}_result_{}_{}.npy'.format(data, model_type, k, fold, seed), pred_diff)
+                    np.save('./results_TRC/{}_{}_{}_result_{}_{}.npy'.format(data, model_type, k, fold, seed), pred_diff) # CPP돌릴 때 바꾸기
                     print("done")
                     total_acc = 0.0
                     total_comp = 0.0
@@ -453,11 +455,6 @@ def parse_args():
         type=float,
         default=[
             0.1,
-            0.2,
-            0.3,
-            0.4,
-            0.5,
-            0.6,
         ],
         nargs="+",
         metavar="N",
@@ -610,4 +607,4 @@ if __name__ == "__main__":
         skip_train_timex=args.skip_train_timex,
         prob=args.prob
     )
-
+    

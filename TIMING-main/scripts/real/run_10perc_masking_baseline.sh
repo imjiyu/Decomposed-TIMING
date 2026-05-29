@@ -9,9 +9,9 @@ wait_n() {
 GPUS=(0 1 2 3)
 NUM_GPUS=${#GPUS[@]}
 i=0
-num_max_jobs=4
+num_max_jobs=1
 
-data_list="wafer freezer boiler epilepsy PAM mimic3"
+data_list="wafer freezer boiler epilepsy PAM"
 for data in ${data_list}; do
     explainer_list="timex timex++"
     for explainer in ${explainer_list}; do

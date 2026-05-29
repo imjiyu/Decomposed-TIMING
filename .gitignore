@@ -1,0 +1,17 @@
+
+# Experiment logs/results
+TIMING-main/*.log
+TIMING-main/logs/
+TIMING-main/logs_archive/
+TIMING-main/logs_td/
+TIMING-main/results_TRC/
+TIMING-main/results_TRC_random/
+TIMING-main/results_ablation/
+TIMING-main/results_new/
+TIMING-main/past_results_cpd/
+TIMING-main/past_results_cpp/
+results_TRC/
+
+# Python cache
+__pycache__/
+*.pyc

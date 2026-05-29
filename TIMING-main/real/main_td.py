@@ -801,6 +801,64 @@ def main(
 
         # attr["timeig_sample50_seg25_min7_max30"] = th.cat(our_results, dim=0)
         attr[f"timing_sample50_seg{num_segments}_min{min_seg_len}_max{max_seg_len}"] = th.cat(our_results, dim=0)
+    
+    ###
+    # real/main.py 의 if "our" 블록 (L765~803) 바로 아래에 추가
+    if "our_td" in explainers: 
+        from attribution.explainers_td import OUR_TD
+        explainer = OUR_TD(classifier.predict)
+
+        trend_method = "kalman"   # ← A="global_spline" / B="spline" / K="kalman"
+        
+        trend_results, resid_results, fxc_results = [], [], []
+        for batch in tqdm(test_loader):
+            x_batch = batch[0].to(device)
+            data_mask = batch[1].to(device)
+            batch_size = x_batch.shape[0]
+            timesteps_b = timesteps[:batch_size, :]
+        
+            from captum._utils.common import _run_forward
+        
+            with th.autograd.set_grad_enabled(False):
+                partial_targets = _run_forward(
+                    classifier, x_batch,
+                    additional_forward_args=(data_mask, timesteps_b, False),
+                )
+            partial_targets = th.argmax(partial_targets, -1)
+        
+            trend_attr, resid_attr, fxc = explainer.attribute_trend_residual_segments(
+                x_batch,
+                baselines=x_batch * 0,
+                targets=partial_targets,
+                additional_forward_args=(data_mask, timesteps_b, False),
+                n_samples=50,
+                num_segments=num_segments,
+                min_seg_len=min_seg_len,
+                max_seg_len=max_seg_len,
+                trend_method=trend_method,
+                kalman_q_level=1e-4,
+                kalman_q_slope=1e-2,
+                n_alphas=50, # 추가!
+                alpha_chunk=10, # 얘도 추가!
+            )
+
+            trend_results.append(trend_attr.detach().cpu())
+            resid_results.append(resid_attr.detach().cpu())
+            fxc_results.append(fxc.detach().cpu())
+    
+        SEG = f"{trend_method}_seg{num_segments}_min{min_seg_len}_max{max_seg_len}"
+
+        trend_signed = th.cat(trend_results, dim=0)
+        resid_signed = th.cat(resid_results, dim=0)
+
+        attr[f"timing_td_trend_{SEG}"]           = trend_signed.abs()   # |T|
+        attr[f"timing_td_residual_{SEG}"]        = resid_signed.abs()   # |R|
+        attr[f"timing_td_trend_signed_{SEG}"]    = trend_signed         # T
+        attr[f"timing_td_residual_signed_{SEG}"] = resid_signed         # R
+        attr[f"timing_td_fxc_{SEG}"]             = th.cat(fxc_results, dim=0)  # ← completeness 검증용
+        attr[f"timing_td_combined_{SEG}"]  = (trend_signed + resid_signed).abs()   # |T+R| 추가
+        attr[f"timing_td_T_plus_R_{SEG}"]  = trend_signed.abs() + resid_signed.abs()  # |T|+|R| 추가
+    ###
 
     if "our_signed" in explainers:
         from attribution.explainers import OUR
@@ -839,7 +897,6 @@ def main(
 
             our_results.append(attr_batch.detach().cpu())
 
-        # attr["timeig_sample50_seg25_min7_max30"] = th.cat(our_results, dim=0)
         attr[f"timing_sample50_seg{num_segments}_min{min_seg_len}_max{max_seg_len}_signed"] = th.cat(our_results, dim=0)
 
 
@@ -972,135 +1029,135 @@ def main(
         .repeat(data_len, 1)
     )
 
-    with open(output_file, "a") as fp, lock:
-        for i, baselines in enumerate([x_avg, 0.0]):
-            for topk in areas:
-                for k, v in attr.items():
-                    cum_diff, AUCC, cum_50_diff, _ = cumulative_difference(
-                        classifier,
-                        x_test,
-                        attributions=v.cpu(),
-                        baselines=baselines,
-                        topk=topk,
-                        top=args.top,
-                        testbs=testbs,
-                        additional_forward_args=(mask_test, None, False),
-                    )
-                    
-                    
-                    
-                    total_acc = 0.0
-                    total_comp = 0.0
-                    total_ce = 0.0
-                    total_lodds = 0.0
-                    total_suff = 0.0
-                    total_samples = 0
+#    with open(output_file, "a") as fp, lock:
+#        for i, baselines in enumerate([x_avg, 0.0]):
+#            for topk in areas:
+#                for k, v in attr.items():
+#                    cum_diff, AUCC, cum_50_diff, _ = cumulative_difference(
+#                        classifier,
+#                        x_test,
+#                        attributions=v.cpu(),
+#                        baselines=baselines,
+#                        topk=topk,
+#                        top=args.top,
+#                        testbs=testbs,
+#                        additional_forward_args=(mask_test, None, False),
+#                    )
+#                    
+#                    
+#                    
+#                    total_acc = 0.0
+#                    total_comp = 0.0
+#                    total_ce = 0.0
+#                    total_lodds = 0.0
+#                    total_suff = 0.0
+#                    total_samples = 0
+#
+#                    # 2. Loop over batches
+#                    for batch_idx, batch in enumerate(test_loader):
+#                        # batch = (input_tensor, data_mask, ...)
+#                        x_batch = batch[0].to(device)
+#                        data_mask_batch = batch[1].to(device)
+#                        batch_size = x_batch.shape[0]
+#
+#                        # If timesteps is sized for the entire dataset, slice for this batch
+#                        # Example (adjust accordingly if needed):
+#                        timesteps_batch = timesteps[batch_idx * batch_size : batch_idx * batch_size + batch_size]
+#
+#                        # Prepare baselines for the batch
+#                        # If baselines is a tensor like x_avg, slice it for the batch dimension
+#                        if isinstance(baselines, th.Tensor):
+#                            baselines_batch = baselines[batch_idx * batch_size : batch_idx * batch_size + batch_size]
+#                            baselines_batch = baselines_batch.to(device)
+#                        else:
+#                            # e.g., if baselines=0.0 or a scalar, you might just keep it as-is
+#                            # Or replicate it: baselines_batch = torch.zeros_like(x_batch)
+#                            baselines_batch = baselines
+#
+#                        # Similarly slice the attribution tensor 'v'
+#                        v_batch = v[batch_idx * batch_size : batch_idx * batch_size + batch_size].to(device)
+#
+#                        # 3. Compute metrics for this batch
+#                        acc = accuracy(
+#                            classifier,
+#                            x_batch,
+#                            attributions=v_batch,
+#                            baselines=baselines_batch,
+#                            topk=topk,
+#                            additional_forward_args=(data_mask_batch, timesteps_batch, False)
+#                        )
+#                        comp = comprehensiveness(
+#                            classifier,
+#                            x_batch,
+#                            attributions=v_batch,
+#                            baselines=baselines_batch,
+#                            topk=topk,
+#                            additional_forward_args=(data_mask_batch, timesteps_batch, False)
+#                        )
+#                        ce = cross_entropy(
+#                            classifier,
+#                            x_batch,
+#                            attributions=v_batch,
+#                            baselines=baselines_batch,
+#                            topk=topk,
+#                            additional_forward_args=(data_mask_batch, timesteps_batch, False)
+#                        )
+#                        l_odds = log_odds(
+#                            classifier,
+#                            x_batch,
+#                            attributions=v_batch,
+#                            baselines=baselines_batch,
+#                            topk=topk,
+#                            additional_forward_args=(data_mask_batch, timesteps_batch, False)
+#                        )
+#                        suff = sufficiency(
+#                            classifier,
+#                            x_batch,
+#                            attributions=v_batch,
+#                            baselines=baselines_batch,
+#                            topk=topk,
+#                            additional_forward_args=(data_mask_batch, timesteps_batch, False)
+#                        )
+#
+#                        # 4. Accumulate results (multiply by batch_size if metrics are averages)
+#                        #    If your metric function already returns a sum, you may not need to multiply.
+#                        total_acc += acc * batch_size
+#                        total_comp += comp * batch_size
+#                        total_ce += ce * batch_size
+#                        total_lodds += l_odds * batch_size
+#                        total_suff += suff * batch_size
+#                        total_samples += batch_size
+#                        
+#                    mean_acc = total_acc / total_samples
+#                    mean_comp = total_comp / total_samples
+#                    mean_ce = total_ce / total_samples
+#                    mean_lodds = total_lodds / total_samples
+#                    mean_suff = total_suff / total_samples
+#
+#                    fp.write(str(seed) + ",")
+#                    fp.write(str(fold) + ",")
+#                    fp.write(baselines_dict[i] + ",")
+#                    fp.write(str(topk) + ",")
+#                    fp.write(k + ",")
+#                    fp.write(str(lambda_1) + ",")
+#                    fp.write(str(lambda_2) + ",")
+#                    fp.write(str(lambda_3) + ",")
+#                    fp.write(f"{cum_50_diff:.4},")
+#                    fp.write(f"{cum_diff:.4},")
+#                    fp.write(f"{AUCC:.4},")
+#                    fp.write(f"{mean_acc:.4},")
+#                    fp.write(f"{mean_comp:.4},")
+#                    fp.write(f"{mean_ce:.4},")
+#                    fp.write(f"{mean_lodds:.4},")
+#                    fp.write(f"{mean_suff:.4}")
+#                    fp.write("\n")
 
-                    # 2. Loop over batches
-                    for batch_idx, batch in enumerate(test_loader):
-                        # batch = (input_tensor, data_mask, ...)
-                        x_batch = batch[0].to(device)
-                        data_mask_batch = batch[1].to(device)
-                        batch_size = x_batch.shape[0]
-
-                        # If timesteps is sized for the entire dataset, slice for this batch
-                        # Example (adjust accordingly if needed):
-                        timesteps_batch = timesteps[batch_idx * batch_size : batch_idx * batch_size + batch_size]
-
-                        # Prepare baselines for the batch
-                        # If baselines is a tensor like x_avg, slice it for the batch dimension
-                        if isinstance(baselines, th.Tensor):
-                            baselines_batch = baselines[batch_idx * batch_size : batch_idx * batch_size + batch_size]
-                            baselines_batch = baselines_batch.to(device)
-                        else:
-                            # e.g., if baselines=0.0 or a scalar, you might just keep it as-is
-                            # Or replicate it: baselines_batch = torch.zeros_like(x_batch)
-                            baselines_batch = baselines
-
-                        # Similarly slice the attribution tensor 'v'
-                        v_batch = v[batch_idx * batch_size : batch_idx * batch_size + batch_size].to(device)
-
-                        # 3. Compute metrics for this batch
-                        acc = accuracy(
-                            classifier,
-                            x_batch,
-                            attributions=v_batch,
-                            baselines=baselines_batch,
-                            topk=topk,
-                            additional_forward_args=(data_mask_batch, timesteps_batch, False)
-                        )
-                        comp = comprehensiveness(
-                            classifier,
-                            x_batch,
-                            attributions=v_batch,
-                            baselines=baselines_batch,
-                            topk=topk,
-                            additional_forward_args=(data_mask_batch, timesteps_batch, False)
-                        )
-                        ce = cross_entropy(
-                            classifier,
-                            x_batch,
-                            attributions=v_batch,
-                            baselines=baselines_batch,
-                            topk=topk,
-                            additional_forward_args=(data_mask_batch, timesteps_batch, False)
-                        )
-                        l_odds = log_odds(
-                            classifier,
-                            x_batch,
-                            attributions=v_batch,
-                            baselines=baselines_batch,
-                            topk=topk,
-                            additional_forward_args=(data_mask_batch, timesteps_batch, False)
-                        )
-                        suff = sufficiency(
-                            classifier,
-                            x_batch,
-                            attributions=v_batch,
-                            baselines=baselines_batch,
-                            topk=topk,
-                            additional_forward_args=(data_mask_batch, timesteps_batch, False)
-                        )
-
-                        # 4. Accumulate results (multiply by batch_size if metrics are averages)
-                        #    If your metric function already returns a sum, you may not need to multiply.
-                        total_acc += acc * batch_size
-                        total_comp += comp * batch_size
-                        total_ce += ce * batch_size
-                        total_lodds += l_odds * batch_size
-                        total_suff += suff * batch_size
-                        total_samples += batch_size
-                        
-                    mean_acc = total_acc / total_samples
-                    mean_comp = total_comp / total_samples
-                    mean_ce = total_ce / total_samples
-                    mean_lodds = total_lodds / total_samples
-                    mean_suff = total_suff / total_samples
-
-                    fp.write(str(seed) + ",")
-                    fp.write(str(fold) + ",")
-                    fp.write(baselines_dict[i] + ",")
-                    fp.write(str(topk) + ",")
-                    fp.write(k + ",")
-                    fp.write(str(lambda_1) + ",")
-                    fp.write(str(lambda_2) + ",")
-                    fp.write(str(lambda_3) + ",")
-                    fp.write(f"{cum_50_diff:.4},")
-                    fp.write(f"{cum_diff:.4},")
-                    fp.write(f"{AUCC:.4},")
-                    fp.write(f"{mean_acc:.4},")
-                    fp.write(f"{mean_comp:.4},")
-                    fp.write(f"{mean_ce:.4},")
-                    fp.write(f"{mean_lodds:.4},")
-                    fp.write(f"{mean_suff:.4}")
-                    fp.write("\n")
-
-    if not os.path.exists("./results_our/"):
-        os.makedirs("./results_our/")
+    if not os.path.exists("./results_new/"):
+        os.makedirs("./results_new/")
     for key in attr.keys():
         result = attr[key]
         if isinstance(result, tuple): result = result[0]
-        np.save('./results_our/{}_{}_{}_result_{}_{}.npy'.format(data, model_type, key, fold, seed), result.detach().cpu().numpy())
+        np.save('./results_new/{}_{}_{}_result_{}_{}.npy'.format(data, model_type, key, fold, seed), result.detach().cpu().numpy())
     
     print(f"{explainers} done")
 

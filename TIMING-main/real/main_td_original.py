@@ -801,6 +801,59 @@ def main(
 
         # attr["timeig_sample50_seg25_min7_max30"] = th.cat(our_results, dim=0)
         attr[f"timing_sample50_seg{num_segments}_min{min_seg_len}_max{max_seg_len}"] = th.cat(our_results, dim=0)
+    
+    ###
+    # real/main.py 의 if "our" 블록 (L765~803) 바로 아래에 추가
+    if "our_td" in explainers: 
+        from attribution.explainers_td import OUR_TD
+        explainer = OUR_TD(classifier.predict)
+
+        trend_method = "kalman"   # ← A="global_spline" / B="spline" / K="kalman"
+        
+        trend_results, resid_results = [], []
+        for batch in tqdm(test_loader):
+            x_batch = batch[0].to(device)
+            data_mask = batch[1].to(device)
+            batch_size = x_batch.shape[0]
+            timesteps_b = timesteps[:batch_size, :]
+        
+            from captum._utils.common import _run_forward
+        
+            with th.autograd.set_grad_enabled(False):
+                partial_targets = _run_forward(
+                    classifier, x_batch,
+                    additional_forward_args=(data_mask, timesteps_b, False),
+                )
+            partial_targets = th.argmax(partial_targets, -1)
+        
+            # 여기가 핵심 호출
+            trend_attr, resid_attr = explainer.attribute_trend_residual_segments(
+                x_batch,
+                baselines=x_batch * 0,            # c=0 / 또는 x_batch.mean(dim=1,keepdim=True).expand_as(x_batch) 로 E[x_0]
+                targets=partial_targets,
+                additional_forward_args=(data_mask, timesteps_b, False),
+                n_samples=50,
+                num_segments=num_segments,
+                min_seg_len=min_seg_len,
+                max_seg_len=max_seg_len,
+                trend_method=trend_method,
+                kalman_q_level=1e-4,              # ← 조정 파라미터 1
+                kalman_q_slope=1e-2,              # ← 조정 파라미터 2
+            )
+
+            trend_results.append(trend_attr.detach().cpu())   # .abs()제거 쟌
+            resid_results.append(resid_attr.detach().cpu())   # .abs()제거 쨘
+    
+        SEG = f"{trend_method}_seg{num_segments}_min{min_seg_len}_max{max_seg_len}" # 이름 구분!
+
+        trend_signed = th.cat(trend_results, dim=0)
+        resid_signed = th.cat(resid_results, dim=0)
+
+        attr[f"timing_td_trend_{SEG}"]           = trend_signed.abs()   # 기존 abs (CPD용)
+        attr[f"timing_td_residual_{SEG}"]        = resid_signed.abs()
+        attr[f"timing_td_trend_signed_{SEG}"]    = trend_signed         # 신규 signed (검증용)
+        attr[f"timing_td_residual_signed_{SEG}"] = resid_signed
+    ###
 
     if "our_signed" in explainers:
         from attribution.explainers import OUR
@@ -1280,3 +1333,4 @@ if __name__ == "__main__":
         skip_train_timex=args.skip_train_timex,
         prob=args.prob
     )
+

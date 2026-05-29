@@ -6,10 +6,10 @@ wait_n() {
     fi
 }
 
-GPUS=(0 1 2 3)
+GPUS=(4 5 6)
 NUM_GPUS=${#GPUS[@]}
 i=0
-num_max_jobs=4
+num_max_jobs=3
 
 # boiler epilepsy
 for cv in 0 1 2 3 4
