@@ -29,3 +29,14 @@ results/
 UCRArchive_2018/
 data/
 result/
+# Local experiment outputs
+logs_td_T/
+results_100_jiyu/
+results_residual_first/
+viz_mean_rsd_boiler/
+viz_out/
+viz_td/
+viz_td_new/
+viz_td_rsd/
+viz_td_rsd_new/
+TimeSynth/

@@ -6,10 +6,10 @@ wait_n() {
     fi
 }
 
-GPUS=(0 1 2 3)
+GPUS=(0 1 2 3 4 5 6)
 NUM_GPUS=${#GPUS[@]}
 i=0
-num_max_jobs=1
+num_max_jobs=7
 
 data_list="wafer freezer boiler epilepsy PAM"
 for data in ${data_list}; do
@@ -53,7 +53,7 @@ for data in ${data_list}; do
                                 --explainers $explainer \
                                 --data $data \
                                 --fold $cv \
-                                --testbs 10 \
+                                --testbs 1 \
                                 --areas 0.1 \
                                 --lambda-1 $lambda_1 \
                                 --lambda-2 $lambda_2 \

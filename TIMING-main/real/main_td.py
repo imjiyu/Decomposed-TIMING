@@ -307,7 +307,7 @@ def main(
                 save_dir=".",
                 version=random.getrandbits(128),
             ),
-            # precision=16, # if OOM occurs
+            precision=16, # if OOM occurs
         )
         mask = GateMaskNet(
             forward_func=classifier.predict,
@@ -805,7 +805,7 @@ def main(
     ###
     # real/main.py 의 if "our" 블록 (L765~803) 바로 아래에 추가
     if "our_td" in explainers: 
-        from attribution.explainers_td import OUR_TD
+        from attribution.explainers_td_rsd import OUR_TD  ### residual 실험용으로 바꿈!! 원래는 "results_new" ^~^
         explainer = OUR_TD(classifier.predict)
 
         trend_method = "kalman"   # ← A="global_spline" / B="spline" / K="kalman"
@@ -846,7 +846,7 @@ def main(
             resid_results.append(resid_attr.detach().cpu())
             fxc_results.append(fxc.detach().cpu())
     
-        SEG = f"{trend_method}_seg{num_segments}_min{min_seg_len}_max{max_seg_len}"
+        SEG = f"{trend_method}_seg{num_segments}_min{min_seg_len}_max{max_seg_len}_rsd" ### residual 실험용으로 바꿈!! 원래는 _rsd없음!
 
         trend_signed = th.cat(trend_results, dim=0)
         resid_signed = th.cat(resid_results, dim=0)
@@ -1152,12 +1152,12 @@ def main(
 #                    fp.write(f"{mean_suff:.4}")
 #                    fp.write("\n")
 
-    if not os.path.exists("./results_new/"):
-        os.makedirs("./results_new/")
+    if not os.path.exists("./results_residual_first/"): ### residual 실험용으로 바꿈!! 원래는 "results_new" ^~^
+        os.makedirs("./results_residual_first/")
     for key in attr.keys():
         result = attr[key]
         if isinstance(result, tuple): result = result[0]
-        np.save('./results_new/{}_{}_{}_result_{}_{}.npy'.format(data, model_type, key, fold, seed), result.detach().cpu().numpy())
+        np.save('./results_residual_first/{}_{}_{}_result_{}_{}.npy'.format(data, model_type, key, fold, seed), result.detach().cpu().numpy())
     
     print(f"{explainers} done")
 
